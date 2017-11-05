@@ -130,7 +130,7 @@ In the case of Random Forest it is (1 - .994) or .6%.
 Note: Since the test data set only contains 20 cases - the probabiliy of classifiying all of them correctly with a model accuracy of 99.4% is approximately 88.6% (.994^20)
 
 Based on the comparison of these two possible models the random forest is selected as the 
-champion and will be used on the validation set
+champion and will be used on the validation set.
 
 ### Step 5. Perform prediction on validation set
 
