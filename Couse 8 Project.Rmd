@@ -1,0 +1,143 @@
+---
+title: "Course 8 Project"
+author: "Sheldon Wall"
+date: "November 4, 2017"
+output: html_document
+---
+# Overview
+
+This project submission (via html markdown) accomplishes the goal of prediting the manner - qualifying how well - a physical exercise was performed.  In this the exercise was barbell lifts.  The training data, a series of measurements taken while correct and incorrect lifts were being performed, was used to create two predictive models.  A champion model was chosen and that model was then used to predict 20 different test cases.
+
+# Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: [Weight Lifting Exercise](http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har)
+
+### Detail
+
+The project shall be performed through the following steps:
+
+1. Setup, load and prepare the data for analysis
+
+2. Set up for cross validation (create partition with training = 75%, testing = 25%)
+
+3. Generate models for boosting and random forest and predict against the testing data
+
+4. Compare the results and choose model
+
+5. Perform prediction on validation set (quiz predictions) 
+
+### Step 1. Setup, load and prepare the data for analysis
+
+```{r setup, include=TRUE, message=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(caret)
+library(dplyr)
+```
+```{r 1. Load and prepare, cache=TRUE, message=FALSE}
+
+## Get the training file 
+fileUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+filename <- "pml-training.csv"
+
+if(!file.exists(filename)){
+    download.file(fileUrl,destfile = filename)
+}
+
+training_file <- read.csv(filename,na.strings = c("NA","#DIV/0!",""))
+
+## Get the validation file
+fileUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+filename <- "pml-testing.csv"
+
+if(!file.exists(filename)){
+    download.file(fileUrl,destfile = filename)
+}
+
+validation <- read.csv(filename,na.strings = c("NA","#DIV/0!",""))
+
+## Remove the columns that will not have significant bearing on the results 
+badcols <- nearZeroVar(training_file)
+
+training_file <- training_file[, -badcols]
+validation <- validation [, -badcols]
+
+## remove columns that sum to NA
+training_file <- training_file[,colSums(is.na(training_file)) == 0]
+validation <- validation[,colSums(is.na(validation)) == 0]
+
+## remove columns that will have no bearing on prediction
+training_file <- training_file [-c(1:6)]
+validation <- validation [-c(1:6)]
+
+dim(training_file)
+```
+
+After feature selection was performed removing columns **near zero variance, sum to NA or columns that will have no significance on the results** there are 52 features and 1 outcome remaining for supervised learning.
+
+### Step 2. Set up for cross validation
+
+```{r PCA, cache=TRUE, message=FALSE}
+## set up for cross validation - training (75%), testing (25%)
+set.seed(53932)
+inTrain <- createDataPartition(y=training_file$classe,p=0.75, list=FALSE)
+training <- training_file[inTrain,]
+testing <- training_file[-inTrain,]
+dim(training)
+dim(testing)
+```
+The training set contains 14718 observations and the training set contains 4904.
+
+### Step 3. Generate models for boosting and random forest and predict against the testing data
+
+Create a boosting model and random forest model using cross validation sampling with k-folds set to 3
+
+```{r Generate models, cache=TRUE, message=FALSE}
+## create gbm
+modelgbm <- train(classe ~ .,method = "gbm",data = training, verbose = F, 
+                    trControl = trainControl(method = "cv", number = 3))
+predict1 <- predict(modelgbm,newdata=testing)
+conf_mat1 <- confusionMatrix(predict1, testing$classe)
+
+## create rf 
+modelrf <- train(classe ~ .,method = "rf",data = training, importance = T,
+                  trControl = trainControl(method = "cv", number = 3))
+predict2 <- predict(modelrf,newdata=testing)
+conf_mat2 <- confusionMatrix(predict2, testing$classe)
+```
+
+### Step 4. Compare the results and choose model champion
+
+```{r Compare Results, echo=TRUE}
+conf_mat1$overall
+conf_mat2$overall
+
+## compare results of boosting versus random forest
+par(mfrow=c(1,1))
+plot(conf_mat1$byClass, main="Model Comparison",col = "black",xlim = c(.93,1),ylim=c(.983,1))
+text(conf_mat1$byClass[,1], conf_mat1$byClass[,2], labels=c("A","B","C","D","E"), cex= 2)
+points(conf_mat2$byClass,col = "red")
+text(conf_mat2$byClass[,1], conf_mat2$byClass[,2], labels=c("A","B","C","D","E"), col = "red",cex= 2)
+legend("bottomright", col=c('black','red'), bty = "n", y.intersp = 1,
+   pch = 1, legend=c("Boosting","RForest"),cex=1)
+
+```
+
+The Accuracy for Boosting was 96.3% (CI 0.9579, 0.9686) versus 99.4% (CI 0.9903, 0.9952) for Random Forest.
+
+The expected out of sample error is (1 - accuracy) for the predictions made against the cross-validation set.
+In the case of Random Forest it is (1 - .994) or .6%.  
+
+Note: Since the test data set only contains 20 cases - the probabiliy of classifiying all of them correctly with a model accuracy of 99.4% is approximately 88.6% (.994^20)
+
+Based on the comparison of these two possible models the random forest is selected as the 
+champion and will be used on the validation set
+
+### Step 5. Perform prediction on validation set
+
+```{r Predict on Validation, echo=TRUE}
+
+## perform prediction on validation set
+predictv <- predict(modelrf,newdata = validation)
+predictv
+
+```
